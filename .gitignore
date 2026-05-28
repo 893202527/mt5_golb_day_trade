@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+
+# Model files
+data/models/*.json
+data/models/*.pkl
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# MT5
+ea/Libraries/zmq/
