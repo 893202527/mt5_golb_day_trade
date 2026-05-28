@@ -1,6 +1,11 @@
 import numpy as np
 import pandas as pd
 
+FEATURE_ORDER = [
+    "ret_1", "ret_5", "ret_20", "rsi", "ema_ratio", "macd",
+    "bb_pos", "atr", "high_low_range", "vol_ratio", "h1_trend", "h4_trend",
+]
+
 
 class FeatureEngine:
     def __init__(self, lookback=50):
