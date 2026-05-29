@@ -92,11 +92,41 @@ private:
     {
         string search = "\"" + key + "\":\"";
         int start = StringFind(json, search);
-        if(start < 0) return "";
+        if(start < 0)
+        {
+            // try unquoted value (number parsed as string fallback)
+            search = "\"" + key + "\":";
+            start = StringFind(json, search);
+            if(start < 0) return "";
+            start += StringLen(search);
+            int end = StringFind(json, ",", start);
+            if(end < 0) end = StringFind(json, "}", start);
+            if(end < 0) return "";
+            string val = StringSubstr(json, start, end - start);
+            StringReplace(val, " ", "");
+            return val;
+        }
         start += StringLen(search);
-        int end = StringFind(json, "\"", start);
-        if(end < 0) return "";
-        return StringSubstr(json, start, end - start);
+        int end = start;
+        while(end < StringLen(json))
+        {
+            ushort ch = StringGetCharacter(json, end);
+            if(ch == '"')
+            {
+                // check if escaped
+                if(end > 0 && StringGetCharacter(json, end - 1) == '\\')
+                {
+                    end++;
+                    continue;
+                }
+                break;
+            }
+            end++;
+        }
+        if(end <= start) return "";
+        string result = StringSubstr(json, start, end - start);
+        StringReplace(result, "\\\"", "\"");
+        return result;
     }
 
     double ParseJsonDouble(string json, string key)
@@ -105,9 +135,18 @@ private:
         int start = StringFind(json, search);
         if(start < 0) return 0.0;
         start += StringLen(search);
-        int end = StringFind(json, ",", start);
-        if(end < 0) end = StringFind(json, "}", start);
-        if(end < 0) return 0.0;
+        // skip whitespace
+        while(start < StringLen(json) && StringGetCharacter(json, start) == ' ')
+            start++;
+        int end = start;
+        while(end < StringLen(json))
+        {
+            ushort ch = StringGetCharacter(json, end);
+            if(ch == ',' || ch == '}' || ch == '\n' || ch == '\r')
+                break;
+            end++;
+        }
+        if(end <= start) return 0.0;
         string val = StringSubstr(json, start, end - start);
         StringReplace(val, " ", "");
         return StringToDouble(val);

@@ -38,7 +38,10 @@ def handle_query(data: dict) -> dict:
             "reason": "insufficient data",
         }
 
-    features = fe.compute(bars)
+    h1_bars = get_recent_bars(symbol, "H1", limit=30)
+    h4_bars = get_recent_bars(symbol, "H4", limit=20)
+
+    features = fe.compute(bars, h1_bars if len(h1_bars) >= 3 else None, h4_bars if len(h4_bars) >= 3 else None)
     if not features:
         return {
             "action": "hold", "confidence": 0.0,

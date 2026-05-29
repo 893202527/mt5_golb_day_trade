@@ -11,7 +11,7 @@ class FeatureEngine:
     def __init__(self, lookback=50):
         self.lookback = lookback
 
-    def compute(self, bars: list[dict]) -> dict:
+    def compute(self, bars: list[dict], h1_bars: list[dict] | None = None, h4_bars: list[dict] | None = None) -> dict:
         if len(bars) < self.lookback + 1:
             return {}
         df = pd.DataFrame(bars)
@@ -40,8 +40,8 @@ class FeatureEngine:
         features["high_low_range"] = float((highs[-1] - lows[-1]) / closes[-1]) if closes[-1] != 0 else 0.0
         vol_mean = np.mean(volumes[-20:]) if len(volumes) >= 20 else 1.0
         features["vol_ratio"] = float(volumes[-1] / vol_mean) if vol_mean > 0 else 1.0
-        features["h1_trend"] = 0
-        features["h4_trend"] = 0
+        features["h1_trend"] = self._trend_score(h1_bars) if h1_bars else 0.0
+        features["h4_trend"] = self._trend_score(h4_bars) if h4_bars else 0.0
         return features
 
     def _rsi(self, closes: np.ndarray, period: int) -> float:
@@ -66,6 +66,17 @@ class FeatureEngine:
         ema12 = self._ema(closes, 12)
         ema26 = self._ema(closes, 26)
         return float(ema12 - ema26)
+
+    def _trend_score(self, bars: list[dict]) -> float:
+        """Compute a directional trend score from bars. Positive=uptrend, negative=downtrend."""
+        if len(bars) < 3:
+            return 0.0
+        closes = np.array([b["close"] for b in bars], dtype=float)
+        short_ema = self._ema(closes, min(4, len(closes)))
+        long_ema = self._ema(closes, min(12, len(closes)))
+        if long_ema == 0:
+            return 0.0
+        return float((short_ema / long_ema) - 1.0) * 100
 
     def _atr(self, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int) -> float:
         if len(closes) < period + 1:

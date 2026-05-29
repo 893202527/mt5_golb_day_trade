@@ -46,7 +46,15 @@ public:
 
     bool HasOpenPosition()
     {
-        return PositionSelect(m_symbol);
+        for(int i = PositionsTotal() - 1; i >= 0; i--)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(PositionSelectByTicket(ticket) &&
+               PositionGetInteger(POSITION_MAGIC) == m_magic &&
+               PositionGetString(POSITION_SYMBOL) == m_symbol)
+                return true;
+        }
+        return false;
     }
 
     double GetLots(double riskPercent, double slPips)

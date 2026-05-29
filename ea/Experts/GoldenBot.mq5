@@ -32,17 +32,36 @@ void OnDeinit(const int reason)
 
 void OnTick()
 {
-    static datetime lastBarTime = 0;
-    datetime currentBar = iTime(Symbol(), PERIOD_M5, 0);
+    static datetime lastM5 = 0, lastH1 = 0, lastH4 = 0;
 
-    if(currentBar != lastBarTime && lastBarTime != 0)
-    {
+    datetime curM5 = iTime(Symbol(), PERIOD_M5, 0);
+    if(curM5 != lastM5 && lastM5 != 0)
         OnBarClose(PERIOD_M5);
-    }
-    lastBarTime = currentBar;
+    lastM5 = curM5;
+
+    datetime curH1 = iTime(Symbol(), PERIOD_H1, 0);
+    if(curH1 != lastH1 && lastH1 != 0)
+        OnBarClose(PERIOD_H1);
+    lastH1 = curH1;
+
+    datetime curH4 = iTime(Symbol(), PERIOD_H4, 0);
+    if(curH4 != lastH4 && lastH4 != 0)
+        OnBarClose(PERIOD_H4);
+    lastH4 = curH4;
 }
 
-void OnBarClose(ENUM_TIMEFRAMES tf)
+string TfToString(ENUM_TIMEFRAMES tf)
+{
+    switch(tf)
+    {
+        case PERIOD_M5:  return "M5";
+        case PERIOD_H1:  return "H1";
+        case PERIOD_H4:  return "H4";
+        default:         return "M5";
+    }
+}
+
+void PublishBar(ENUM_TIMEFRAMES tf, string tfStr)
 {
     double open  = iOpen(Symbol(), tf, 1);
     double high  = iHigh(Symbol(), tf, 1);
@@ -50,11 +69,14 @@ void OnBarClose(ENUM_TIMEFRAMES tf)
     double close = iClose(Symbol(), tf, 1);
     long   vol   = iVolume(Symbol(), tf, 1);
     int    spread = (int)SymbolInfoInteger(Symbol(), SYMBOL_SPREAD);
-
-    string tfStr = "M5";
     datetime barTime = iTime(Symbol(), tf, 1);
 
     g_zmq.PublishOHLC(Symbol(), tfStr, barTime, open, high, low, close, vol, spread);
+}
+
+void OnBarClose(ENUM_TIMEFRAMES tf)
+{
+    PublishBar(tf, TfToString(tf));
 
     if(tf == PERIOD_M5 && !g_order.HasOpenPosition())
     {

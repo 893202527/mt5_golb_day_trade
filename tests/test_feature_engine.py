@@ -37,6 +37,28 @@ def test_feature_engine_insufficient_bars():
     assert features == {}
 
 
+def test_trend_score_from_h1_h4_bars():
+    fe = FeatureEngine(lookback=10)
+    m5_bars = make_bars(60, base=2650.0)
+
+    # uptrend bars: price consistently rising
+    up_bars = [{"open": 2600 + i, "high": 2602 + i, "low": 2599 + i, "close": 2601 + i, "tick_volume": 100} for i in range(20)]
+    # downtrend bars: price consistently falling
+    down_bars = [{"open": 2700 - i, "high": 2702 - i, "low": 2699 - i, "close": 2701 - i, "tick_volume": 100} for i in range(15)]
+
+    features = fe.compute(m5_bars, up_bars, down_bars)
+    assert features["h1_trend"] > 0, f"Expected positive H1 trend, got {features['h1_trend']}"
+    assert features["h4_trend"] < 0, f"Expected negative H4 trend, got {features['h4_trend']}"
+
+
+def test_trend_score_fallback_to_zero_when_no_bars():
+    fe = FeatureEngine(lookback=50)
+    bars = make_bars(60)
+    features = fe.compute(bars)
+    assert features["h1_trend"] == 0.0
+    assert features["h4_trend"] == 0.0
+
+
 def test_rsi_extreme_values():
     fe = FeatureEngine(lookback=10)
     # All up: RSI should be 100
