@@ -3,7 +3,9 @@ import pandas as pd
 
 FEATURE_ORDER = [
     "ret_1", "ret_5", "ret_20", "rsi", "ema_ratio", "macd",
-    "bb_pos", "atr", "high_low_range", "vol_ratio", "h1_trend", "h4_trend",
+    "bb_pos", "atr", "high_low_range", "vol_ratio",
+    "h1_trend", "h4_trend",
+    "adx_14", "stoch_k", "volatility_20", "sma_ratio", "volume_sma",
 ]
 
 
@@ -42,6 +44,11 @@ class FeatureEngine:
         features["vol_ratio"] = float(volumes[-1] / vol_mean) if vol_mean > 0 else 1.0
         features["h1_trend"] = self._trend_score(h1_bars) if h1_bars else 0.0
         features["h4_trend"] = self._trend_score(h4_bars) if h4_bars else 0.0
+        features["adx_14"] = self._adx(highs, lows, closes, 14)
+        features["stoch_k"] = self._stoch_k(closes, highs, lows, 14)
+        features["volatility_20"] = self._volatility(closes, 20)
+        features["sma_ratio"] = self._sma_ratio(closes, 50, 200)
+        features["volume_sma"] = self._volume_sma(volumes, 20)
         return features
 
     def _rsi(self, closes: np.ndarray, period: int) -> float:
@@ -90,3 +97,57 @@ class FeatureEngine:
             )
             trs.append(tr)
         return float(np.mean(trs[-period:])) if trs else 0.0
+
+    def _adx(self, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray, period: int) -> float:
+        """Average Directional Index — trend strength (0-100)."""
+        if len(closes) < period * 2:
+            return 25.0
+        n = len(closes)
+        tr_list, plus_dm, minus_dm = [], [], []
+        for i in range(max(1, n - period * 2), n):
+            tr = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1]))
+            tr_list.append(tr)
+            up = highs[i] - highs[i - 1]
+            dn = lows[i - 1] - lows[i]
+            plus_dm.append(up if up > 0 and up > dn else 0)
+            minus_dm.append(dn if dn > 0 and dn > up else 0)
+        atr_val = np.mean(tr_list[-period:]) if tr_list else 1.0
+        if atr_val == 0:
+            return 25.0
+        plus_di = 100 * np.mean(plus_dm[-period:]) / atr_val
+        minus_di = 100 * np.mean(minus_dm[-period:]) / atr_val
+        dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di) if (plus_di + minus_di) > 0 else 0
+        return float(dx)
+
+    def _stoch_k(self, closes: np.ndarray, highs: np.ndarray, lows: np.ndarray, period: int) -> float:
+        """Stochastic %K (0-100)."""
+        if len(closes) < period:
+            return 50.0
+        recent_high = np.max(highs[-period:])
+        recent_low = np.min(lows[-period:])
+        rng = recent_high - recent_low
+        return float(100 * (closes[-1] - recent_low) / rng) if rng > 0 else 50.0
+
+    def _volatility(self, closes: np.ndarray, period: int) -> float:
+        """Annualized return volatility."""
+        if len(closes) < period + 1:
+            return 0.0
+        returns = np.diff(closes[-(period + 1):]) / closes[-(period + 1):-1]
+        return float(np.std(returns) * np.sqrt(252))
+
+    def _sma_ratio(self, closes: np.ndarray, short: int, long: int) -> float:
+        """SMA(short) / SMA(long) ratio — long-term trend."""
+        if len(closes) < long:
+            if len(closes) < short:
+                return 1.0
+            return float(np.mean(closes[-short:]) / closes[-1])
+        s = np.mean(closes[-short:])
+        l = np.mean(closes[-long:])
+        return float(s / l) if l > 0 else 1.0
+
+    def _volume_sma(self, volumes: np.ndarray, period: int) -> float:
+        """Volume relative to its SMA."""
+        if len(volumes) < period or volumes[-1] == 0:
+            return 1.0
+        avg = np.mean(volumes[-period:])
+        return float(volumes[-1] / avg) if avg > 0 else 1.0

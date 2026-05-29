@@ -2,11 +2,7 @@ import os
 import pickle
 import numpy as np
 import config
-
-FEATURE_ORDER = [
-    "ret_1", "ret_5", "ret_20", "rsi", "ema_ratio", "macd",
-    "bb_pos", "atr", "high_low_range", "vol_ratio", "h1_trend", "h4_trend",
-]
+from feature_engine import FEATURE_ORDER
 
 
 class MLPredictor:
@@ -35,6 +31,8 @@ class MLPredictor:
         confidence = float(proba.max())
         if confidence < config.ML_CONFIDENCE_THRESHOLD:
             return ("hold", confidence)
+        if len(proba) == 2:
+            return ("buy" if idx == 1 else "sell", confidence)
         labels = {0: "hold", 1: "sell", 2: "buy"}
         return (labels.get(idx, "hold"), confidence)
 
