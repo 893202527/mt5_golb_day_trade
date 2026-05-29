@@ -200,6 +200,11 @@ def main():
     )
     model.fit(X, y, verbose=False)
 
+    # Persist model to configured path
+    os.makedirs(os.path.dirname(config.MODEL_PATH), exist_ok=True)
+    model.save_model(config.MODEL_PATH)
+    print(f"  -> Model saved to {config.MODEL_PATH}")
+
     with tempfile.TemporaryDirectory() as tmp:
         model_path = os.path.join(tmp, "model.json")
         model.save_model(model_path)

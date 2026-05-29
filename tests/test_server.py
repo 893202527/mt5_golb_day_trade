@@ -56,6 +56,12 @@ def test_handle_query_with_data_returns_hold_when_no_model(monkeypatch):
 
     import server
     monkeypatch.setattr(server, "get_recent_bars", mock_get_bars)
+
+    # Replace server's module-level predictor with a no-model version
+    from ml_model import MLPredictor
+    predictor_no_model = MLPredictor(model_path="/nonexistent/model.json")
+    monkeypatch.setattr(server, "predictor", predictor_no_model)
+
     resp = server.handle_query({"symbol": "XAUUSD", "tf": "M5"})
     assert resp["action"] == "hold"
     assert resp["confidence"] == 0.0
