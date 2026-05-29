@@ -1,6 +1,7 @@
 import json
 import signal
 import zmq
+from collections import deque
 import config
 from db import insert_ohlc, get_recent_bars, insert_signal
 from feature_engine import FeatureEngine
@@ -10,6 +11,28 @@ from llm_gate import confirm_signal
 running = True
 fe = FeatureEngine(lookback=config.FEATURE_LOOKBACK)
 predictor = MLPredictor()
+
+# In-memory ring buffers for recent bars, keyed by timeframe
+# Avoids DB round-trips on every signal query
+_bar_cache: dict[str, deque[dict]] = {
+    "M5": deque(maxlen=60),
+    "H1": deque(maxlen=50),
+    "H4": deque(maxlen=20),
+}
+
+
+def _cache_append(tf: str, bar: dict):
+    if tf in _bar_cache:
+        _bar_cache[tf].append(bar)
+
+
+def _cache_get(tf: str, limit: int) -> list[dict]:
+    """Return up to `limit` most recent bars from cache, oldest first."""
+    buf = _bar_cache.get(tf)
+    if not buf:
+        return []
+    items = list(buf)
+    return items[-limit:] if len(items) > limit else items
 
 
 def handle_ohlc(data: dict):
@@ -24,13 +47,24 @@ def handle_ohlc(data: dict):
         "volume": data.get("tick_volume", 0),
         "spread": data.get("spread", 0),
     }
+    _cache_append(data["tf"], {
+        "bar_time": data["time"],
+        "open": data["open"], "high": data["high"],
+        "low": data["low"], "close": data["close"],
+        "tick_volume": data.get("tick_volume", 0),
+    })
     insert_ohlc(row)
 
 
 def handle_query(data: dict) -> dict:
     symbol = data.get("symbol", config.SYMBOL)
     tf = data.get("tf", config.SIGNAL_TF)
-    bars = get_recent_bars(symbol, tf, limit=config.FEATURE_LOOKBACK + 10)
+
+    # Prefer in-memory cache, fall back to DB
+    bars = _cache_get(tf, config.FEATURE_LOOKBACK + 10)
+    if len(bars) < config.FEATURE_LOOKBACK + 1:
+        bars = get_recent_bars(symbol, tf, limit=config.FEATURE_LOOKBACK + 10)
+
     if len(bars) < config.FEATURE_LOOKBACK + 1:
         return {
             "action": "hold", "confidence": 0.0,
@@ -38,8 +72,13 @@ def handle_query(data: dict) -> dict:
             "reason": "insufficient data",
         }
 
-    h1_bars = get_recent_bars(symbol, "H1", limit=30)
-    h4_bars = get_recent_bars(symbol, "H4", limit=20)
+    h1_bars = _cache_get("H1", 30)
+    if len(h1_bars) < 3:
+        h1_bars = get_recent_bars(symbol, "H1", limit=30)
+
+    h4_bars = _cache_get("H4", 20)
+    if len(h4_bars) < 3:
+        h4_bars = get_recent_bars(symbol, "H4", limit=20)
 
     features = fe.compute(bars, h1_bars if len(h1_bars) >= 3 else None, h4_bars if len(h4_bars) >= 3 else None)
     if not features:

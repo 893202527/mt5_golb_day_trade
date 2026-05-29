@@ -57,6 +57,53 @@ public:
         return false;
     }
 
+    // --- Trailing stop ---
+    void UpdateTrailingStop(double trailPoints, double activatePoints = 0)
+    {
+        // trailPoints: distance in points. activatePoints: min profit before trail starts.
+        if(activatePoints <= 0) activatePoints = trailPoints;
+
+        for(int i = PositionsTotal() - 1; i >= 0; i--)
+        {
+            ulong ticket = PositionGetTicket(i);
+            if(!PositionSelectByTicket(ticket)) continue;
+            if(PositionGetInteger(POSITION_MAGIC) != m_magic) continue;
+            if(PositionGetString(POSITION_SYMBOL) != m_symbol) continue;
+
+            double entry    = PositionGetDouble(POSITION_PRICE_OPEN);
+            double curSl    = PositionGetDouble(POSITION_SL);
+            double curPrice = PositionGetDouble(POSITION_PRICE_CURRENT);
+            double point    = SymbolInfoDouble(m_symbol, SYMBOL_POINT);
+            int    dir      = (int)PositionGetInteger(POSITION_TYPE); // 0=buy, 1=sell
+
+            double profitPoints = 0;
+            double newSl = 0;
+
+            if(dir == POSITION_TYPE_BUY)
+            {
+                profitPoints = (curPrice - entry) / point;
+                if(profitPoints < activatePoints) continue;
+                newSl = curPrice - trailPoints * point;
+                if(newSl > curSl || curSl == 0)
+                {
+                    m_trade.PositionModify(ticket, newSl,
+                        PositionGetDouble(POSITION_TP));
+                }
+            }
+            else // sell
+            {
+                profitPoints = (entry - curPrice) / point;
+                if(profitPoints < activatePoints) continue;
+                newSl = curPrice + trailPoints * point;
+                if(newSl < curSl || curSl == 0)
+                {
+                    m_trade.PositionModify(ticket, newSl,
+                        PositionGetDouble(POSITION_TP));
+                }
+            }
+        }
+    }
+
     double GetLots(double riskPercent, double slPips)
     {
         double balance = AccountInfoDouble(ACCOUNT_BALANCE);
