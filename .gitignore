@@ -4,9 +4,10 @@ __pycache__/
 .venv/
 *.egg-info/
 
-# Model files
+# Data files
 data/models/*.json
 data/models/*.pkl
+data/features/*.csv
 
 # Environment
 .env
